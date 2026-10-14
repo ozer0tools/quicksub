@@ -21,10 +21,10 @@ const SR = 16000;
 
 function post(type, data = {}) { self.postMessage({ type, ...data }); }
 
-async function load(model, device, ortBase, f16 = true, modelHost = '') {
+async function load(model, device, ortBase, f16 = true, modelHost = '', modelPath = '') {
   if (modelHost) {
     env.remoteHost = modelHost;
-    env.remotePathTemplate = '{model}/';
+    env.remotePathTemplate = modelPath || '{model}/resolve/{revision}/';
     setModelHost(modelHost);
   }
   const key = model + '|' + device + '|' + f16;
@@ -51,6 +51,7 @@ async function load(model, device, ortBase, f16 = true, modelHost = '') {
       : [{ encoder_model: 'fp32', decoder_model_merged: dec }, 'fp32'];
   } else tries = [m.wasm, 'q8', undefined];
   const errors = [];
+  post('load-plan', { f16, first: tries[0] });
   for (const dtype of tries) {
     try {
       asr = await pipeline('automatic-speech-recognition', m.repo, { device, dtype, progress_callback });
@@ -123,10 +124,10 @@ self.onmessage = async ({ data }) => {
   if (data.device === 'webgpu' && data.f16 === undefined) data.f16 = await workerF16();
   try {
     if (data.type === 'load') {
-      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath);
       post('loaded', { device: data.device });
     } else if (data.type === 'run') {
-      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath);
       const segments = await run(data.audio, data.prompt);
       post('result', { id: data.id, segments });
     }

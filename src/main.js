@@ -2,7 +2,7 @@
 import { DEFAULT_STYLE, buildCues, wordsFromSegments, toSrt, fromSrt, drawCaption, sampleCue } from './captions.js';
 import { families, facesOf, bestFace, ensureFace, hasLocalFonts, loadLocalFonts, addUploadedFont, weightName } from './fonts.js';
 import { probe, frameAt, audio16k, burn, pickVideoCodec } from './media.js';
-import { MODEL_HOST } from './config.js';
+import { MODEL_HOST, MODEL_PATH } from './config.js';
 
 const DOWNLOAD_URL = 'https://github.com/ozer0tools/quicksub/releases/latest';
 const VIDEO_EXT = /\.(mp4|mov|mkv|m4v|webm|avi|wmv|flv|mts|m2ts|ts|3gp|mpg|mpeg|ogv)$/i;
@@ -48,7 +48,7 @@ function transcribe(audio, onMsg) {
       else onMsg(d);
     };
     getWorker().postMessage({ type: 'run', id: 1, audio, model: opts.model, device: caps.webgpu ? 'webgpu' : 'wasm',
-      modelHost: MODEL_HOST, ortBase: new URL('./ort/', document.baseURI).href }, [audio.buffer]);
+      modelHost: MODEL_HOST, modelPath: MODEL_PATH, ortBase: new URL('./ort/', document.baseURI).href }, [audio.buffer]);
   });
 }
 
@@ -305,6 +305,7 @@ const modal = {
     }
     $('#dlPct').textContent = Math.floor(p) + '%';
     const eta = speed > 0 ? Math.max(1, Math.round((t - l) / speed)) : 0;
+    $('#dlVar').textContent = this.variant || '';
     $('#dlInfo').textContent = `${mb(l)} de ${mb(t)} MB` + (speed > 0 ? ` · ${(speed / 1e6).toFixed(1).replace('.', ',')} MB/s · faltam ${eta < 60 ? eta + ' s' : Math.ceil(eta / 60) + ' min'}` : '');
   },
   hide() { if (this.shown) { $('#dlModal').hidden = true; this.shown = false; } },
@@ -332,6 +333,10 @@ async function processOne(f, signal) {
         modal.progress(d.loaded, d.total, d.speed);
       }
       if (d.type === 'run-progress') { modal.hide(); set('transcrevendo', d.pct * 100); }
+      if (d.type === 'load-plan') {
+        modal.variant = d.f16 ? 'versão leve (fp16)' : 'versão completa: o navegador não informou suporte a fp16 na placa';
+        console.info('[QuickSub] plano', d);
+      }
       if (d.type === 'model-info') {
         const dt = typeof d.dtype === 'string' ? d.dtype : `ouvido ${d.dtype.encoder_model}, texto ${d.dtype.decoder_model_merged}`;
         $('#modelNote').textContent = `Modelo carregado: ${MODEL_NAME[opts.model]} (${dt}).` + (d.errors.length ? ' Versões que falharam antes: ' + d.errors.join(' | ') : '');
