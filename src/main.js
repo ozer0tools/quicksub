@@ -266,11 +266,12 @@ function renderOut() {
   $('#pickOut').hidden = !canPickDir;
   $('#outName').textContent = outDir ? outDir.name : '';
   $('#outNote').textContent = canPickDir
-    ? (outDir ? 'Os vídeos e os .srt são gravados direto nesta pasta.' : 'Sem pasta escolhida, ele pergunta ao começar.')
+    ? (outDir ? 'Os vídeos e os .srt são gravados direto nesta pasta.'
+      : 'O Chrome não deixa usar a Área de Trabalho, Documentos, Downloads ou a raiz do disco direto: escolha ou crie uma subpasta (ex.: Vídeos\\Legendados) com o botão "Nova pasta" da janela. Sem pasta, cada arquivo vira um download.')
     : 'Este navegador não deixa gravar numa pasta: cada vídeo e .srt vira um download. Chrome e Edge gravam direto na pasta.';
 }
 async function pickOut() {
-  outDir = await window.showDirectoryPicker({ id: 'quicksub-out', mode: 'readwrite' });
+  outDir = await window.showDirectoryPicker({ id: 'quicksub-out', mode: 'readwrite', startIn: 'videos' });
   renderOut();
 }
 $('#pickOut').onclick = () => pickOut().catch(() => {});
@@ -323,7 +324,11 @@ async function processOne(f, signal) {
 }
 async function runBatch() {
   if (!files.some(f => !f.err)) return;
-  if (canPickDir && !outDir) { try { await pickOut(); } catch (e) { log('Escolha uma pasta de saída para começar.'); return; } }
+  if (canPickDir && !outDir) {
+    log('Escolha onde salvar. Dica: crie uma subpasta, por exemplo Vídeos\\Legendados.');
+    try { await pickOut(); }
+    catch (e) { log('Sem pasta escolhida: os vídeos e .srt vão como downloads.'); }
+  }
   running = true; abortCtl = new AbortController();
   const list = files.filter(f => !f.err);
   list.forEach(f => Object.assign(f, { status: 'fila', pct: 0, msg: '', out: null }));
