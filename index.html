@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuickSub · Legendas automáticas no navegador</title>
+<meta name="description" content="Legendas automáticas em português, direto no navegador. Seus vídeos não saem do computador.">
+<link rel="icon" href="./static/icone-qs.svg?v=2" type="image/svg+xml">
+<link rel="icon" href="./static/icone-qs-256.png?v=2" type="image/png" sizes="256x256">
+<script>window.coi={coepCredentialless:()=>true,quiet:true};</script>
+<script src="./coi-serviceworker.min.js"></script>
+<script>try{var t=localStorage.getItem("qs-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+<div class="frame">
+<div class="wrap">
+
+<nav>
+  <div class="logo"><svg class="wordmark" viewBox="0 0 535.37 113" fill="currentColor" role="img" aria-label="QuickSub"><path d="M52.48,91.55c-2,0-3.69-.7-5.06-2.1-1.38-1.4-2.06-3.1-2.06-5.1v-5.25c-4.6-.85-8.19-3.06-10.76-6.64-2.58-3.57-3.86-8.36-3.86-14.36v-11.7c0-6.75,1.73-12.01,5.17-15.79,3.45-3.77,8.18-5.66,14.18-5.66s10.72,1.89,14.17,5.66c3.45,3.78,5.17,9.04,5.17,15.79v11.7c0,6-1.29,10.79-3.86,14.36-2.58,3.58-6.16,5.79-10.76,6.64v1.35c0,1.4.62,2.1,1.88,2.1h4.65v9h-8.85ZM50.08,70.55c3.6,0,6.07-1.12,7.42-3.38s2.02-5.12,2.02-8.62v-12.6c0-2.2-.33-4.21-.98-6.04-.65-1.82-1.66-3.27-3.04-4.35-1.38-1.07-3.19-1.61-5.44-1.61s-4.08.54-5.48,1.61c-1.4,1.08-2.41,2.53-3.04,4.35-.63,1.83-.94,3.84-.94,6.04v12.6c0,3.5.67,6.38,2.02,8.62s3.83,3.38,7.43,3.38Z"/><path d="M93.72,79.55c-4.6,0-8.46-.84-11.59-2.51-3.12-1.67-5.47-3.96-7.05-6.86-1.58-2.9-2.36-6.17-2.36-9.82v-2.25h9.9v1.8c0,3.15.92,5.66,2.78,7.54,1.85,1.88,4.67,2.81,8.47,2.81,3,0,5.22-.65,6.68-1.95,1.45-1.3,2.17-2.85,2.17-4.65,0-1.15-.28-2.21-.82-3.19-.55-.98-1.55-1.82-3-2.55-1.45-.72-3.53-1.31-6.22-1.76-3.5-.6-6.61-1.47-9.34-2.62-2.73-1.15-4.88-2.76-6.45-4.84-1.57-2.07-2.36-4.84-2.36-8.29v-.45c0-2.85.75-5.41,2.25-7.69,1.5-2.27,3.61-4.06,6.34-5.36,2.73-1.3,5.91-1.95,9.56-1.95,4.15,0,7.65.75,10.5,2.25,2.85,1.5,5.01,3.49,6.49,5.96s2.21,5.14,2.21,7.99v2.7h-9.9v-1.8c0-2.1-.81-3.92-2.44-5.47-1.62-1.55-3.91-2.33-6.86-2.33-2.45,0-4.41.51-5.89,1.54-1.47,1.03-2.21,2.41-2.21,4.16s.79,3.25,2.36,4.35c1.57,1.1,4.54,2.05,8.89,2.85,5.5.95,9.7,2.61,12.6,4.99,2.9,2.38,4.35,5.86,4.35,10.46v.9c0,4.85-1.7,8.74-5.1,11.66-3.4,2.92-8.05,4.39-13.95,4.39Z"/><rect x="3.5" y="3.5" width="138" height="106" rx="17" fill="none" stroke="currentColor" stroke-width="7"/><text x="168.17" y="79.55" font-family="'Space Mono', monospace" font-size="75">QUICKSUB</text></svg><span class="ver">V1.5 · WEB</span></div>
+  <div class="status"><button class="tagbtn theme" id="theme" title="Alternar modo claro/escuro"><i></i><span class="lbl">Escuro</span></button></div>
+</nav>
+
+<section class="banner" id="banner" hidden>
+  <div><b id="bannerTitle"></b><span id="bannerText"></span></div>
+  <a class="cta ghost" id="bannerLink" target="_blank" rel="noopener">Baixar para Windows</a>
+</section>
+
+<section class="intro"><span class="xbox" style="top:22px"></span>
+  <div class="vlist">
+    <div class="vhead"><span class="vlabel">Vídeos <b id="count">00</b></span>
+      <span class="views"><button class="vbtn on" data-view="list" title="Lista" aria-label="Ver em lista">
+        <svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><rect y="0" width="14" height="2"/><rect y="5" width="14" height="2"/><rect y="10" width="14" height="2"/></svg></button><button class="vbtn" data-view="thumbs" title="Miniaturas" aria-label="Ver miniaturas">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect width="5" height="5"/><rect x="7" width="5" height="5"/><rect y="7" width="5" height="5"/><rect x="7" y="7" width="5" height="5"/></svg></button></span></div>
+    <div class="vscroll"><div id="vitems"></div></div>
+    <div class="vfoot">
+      <div class="vbtns"><button class="tagbtn" id="pickFolder">+ Pasta</button><button class="tagbtn" id="pickFiles">+ Arquivos</button><button class="tagbtn" id="clear" hidden>Limpar</button></div>
+      <p class="hint dropnote">ou arraste vídeos e arquivos .srt para cá</p>
+      <input type="file" id="fileInput" multiple accept="video/*,.mkv,.mov,.avi,.wmv,.flv,.mts,.m2ts,.ts,.3gp,.srt" hidden>
+      <input type="file" id="dirInput" webkitdirectory multiple hidden>
+    </div>
+  </div>
+  <div class="infocol"><div id="info"></div></div>
+  <div class="card preview">
+    <div class="tags"><span class="tag or">Preview</span><select class="tag" id="ref" aria-label="Vídeo de referência"></select></div>
+    <div class="stage"><canvas id="prev" aria-label="Preview da legenda"></canvas></div>
+    <div class="stats">
+      <div><b id="sRes">1920×1080</b><small>Resolução</small></div>
+      <div><b id="sDur">—</b><small>Duração</small></div>
+      <div><b id="sDev">—</b><small>Aceleração</small></div>
+      <div><b id="sMod">turbo</b><small>Modelo</small></div>
+      <button class="arrow" id="nextRef" title="Próximo vídeo de referência">→</button>
+    </div>
+  </div>
+</section>
+
+<section class="bar">
+  <button class="tagbtn on" data-tab="texto">Texto</button>
+  <button class="tagbtn" data-tab="contorno">Contorno e fundo</button>
+  <button class="tagbtn" data-tab="posicao">Posição</button>
+  <button class="tagbtn" data-tab="transcricao">Transcrição</button>
+  <button class="tagbtn" data-tab="exportacao">Exportação</button>
+  <label class="search"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 2.5h10M6.5 2.5v9"/></svg>
+    <input type="text" id="sample" value="Assim a legenda vai aparecer no seu vídeo, com este estilo." aria-label="Texto de exemplo do preview"></label>
+</section>
+
+<section class="settings">
+  <div class="card">
+    <div class="panel on" data-panel="texto">
+      <div><span class="cell-l">Fonte <span id="nfam"></span></span><div class="ctl"><select class="in" id="family" aria-label="Fonte"></select></div>
+        <div class="fontbtns"><button class="mini" id="localFonts" hidden>Usar fontes do computador</button><label class="mini">Enviar fonte<input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2" multiple hidden></label></div></div>
+      <div><span class="cell-l">Peso e estilo</span><div class="ctl"><select class="in" id="face" aria-label="Peso e estilo da fonte"></select></div>
+        <div class="ctl" style="margin-top:6px"><label class="chk"><input type="checkbox" data-k="upper">MAIÚSCULAS</label></div></div>
+      <div><span class="cell-l">Tamanho</span><div class="ctl"><input type="range" data-k="size" min="2" max="12" step="0.1"><output></output></div></div>
+      <div><span class="cell-l">Cor</span><div class="ctl"><input type="color" data-k="color"></div></div>
+    </div>
+    <div class="panel" data-panel="contorno">
+      <div><span class="cell-l">Contorno</span><div class="ctl"><input type="range" data-k="outline" min="0" max="12" step="0.5"><output></output><input type="color" data-k="outline_color"></div></div>
+      <div><span class="cell-l">Sombra</span><div class="ctl"><input type="range" data-k="shadow" min="0" max="12" step="0.5"><output></output></div></div>
+      <div><span class="cell-l">Caixa de fundo</span><div class="ctl"><label class="chk"><input type="checkbox" data-k="box">Usar caixa</label></div><p class="hint">Substitui o contorno.</p></div>
+      <div><span class="cell-l">Cor e opacidade da caixa</span><div class="ctl"><input type="color" data-k="box_color"><input type="range" data-k="box_opacity" min="0.1" max="1" step="0.05"><output></output></div></div>
+    </div>
+    <div class="panel" data-panel="posicao">
+      <div><span class="cell-l">Altura na tela</span><div class="ctl"><input type="range" data-k="pos" min="8" max="98" step="1"><output></output></div></div>
+      <div><span class="cell-l">Letras por linha</span><div class="ctl"><input type="range" data-k="max_chars" min="10" max="60" step="1"><output></output></div></div>
+      <div><span class="cell-l">Linhas</span><div class="ctl"><select class="in" data-k="max_lines" data-num><option>1</option><option>2</option><option>3</option></select></div></div>
+      <div><span class="cell-l">Palavra falada</span><div class="ctl"><label class="chk"><input type="checkbox" data-k="highlight">Destacar</label><input type="color" data-k="highlight_color"></div></div>
+    </div>
+    <div class="panel" data-panel="transcricao">
+      <div><span class="cell-l">Modelo</span><div class="ctl"><select class="in" data-o="model">
+        <option value="turbo">turbo (preciso, pede placa de vídeo)</option>
+        <option value="small">small (equilibrado)</option>
+        <option value="base">base (leve, menos preciso)</option></select></div></div>
+      <div class="span3"><span class="cell-l">Aceleração</span><p class="hint" id="gpuNote"></p><p class="hint" id="modelNote" style="margin-top:6px"></p></div>
+    </div>
+    <div class="panel" data-panel="exportacao">
+      <div><span class="cell-l">O que fazer</span><div class="ctl"><select class="in" data-o="mode">
+        <option value="tudo">Transcrever e legendar</option>
+        <option value="srt">Só gerar os SRT</option></select></div></div>
+      <div><span class="cell-l">Qualidade</span><div class="ctl"><select class="in" data-o="quality">
+        <option value="alta">Alta (arquivo maior)</option><option value="padrao">Padrão</option><option value="leve">Leve</option></select></div></div>
+      <div class="span2"><span class="cell-l">Salvar em</span><div class="ctl"><button class="tagbtn" id="pickOut">Escolher pasta de saída</button><span class="hint" id="outName"></span></div>
+        <p class="hint" id="outNote" style="margin-top:6px"></p></div>
+      <div class="span2"><span class="cell-l">SRT revisado</span><div class="ctl"><label class="chk"><input type="checkbox" data-o="reuse_srt">Usar o .srt de mesmo nome, se você adicionar um junto com o vídeo</label></div></div>
+      <div class="span2"><p class="hint">Para revisar o texto: gere só os SRT, corrija no Bloco de Notas e adicione os .srt junto com os vídeos. Eles entram no lugar da transcrição.</p></div>
+    </div>
+  </div>
+</section>
+
+
+
+<section class="end">
+  <span class="xbox"></span>
+  <div class="ask">
+    <div class="q">Pronto para<br><span>legendar?</span></div>
+    <div id="log"></div>
+  </div>
+  <div class="deco">
+    <svg width="96" height="78" viewBox="0 0 96 78" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M30 4h20v14h14v18h28v18H64v20H44V54H4V36h26z"/><circle cx="48" cy="74" r="0"/></svg>
+  </div>
+  <div class="actions">
+    <button class="cta" data-go>Legendar</button>
+    <button class="cta ghost" id="open">Baixar o QuickSub para Windows</button>
+  </div>
+</section>
+
+</div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
