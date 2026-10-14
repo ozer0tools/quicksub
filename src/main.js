@@ -333,6 +333,10 @@ async function processOne(f, signal) {
         modal.progress(d.loaded, d.total, d.speed);
       }
       if (d.type === 'run-progress') { modal.hide(); set('transcrevendo', d.pct * 100); }
+      if (d.type === 'dl-source') {
+        modal.variant = (modal.variant || '') + ' · a ponte não respondeu, baixando direto do Hugging Face (mais lento)';
+        console.warn('[QuickSub] ponte indisponível:', d.reason);
+      }
       if (d.type === 'load-plan') {
         modal.variant = d.f16 ? 'versão leve (fp16)' : 'versão completa: o navegador não informou suporte a fp16 na placa';
         console.info('[QuickSub] plano', d);

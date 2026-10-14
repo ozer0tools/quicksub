@@ -44,9 +44,9 @@ export default {
       }
       h.set('Cache-Control', 'public, max-age=2592000, immutable');
       res = new Response(up.body, { status: up.status, headers: h });
-      // guarda pedaços de até 100 MB no cache do Cloudflare
+      // guarda pedaços de até 500 MB no cache do Cloudflare (o limite do plano grátis é 512 MB)
       const len = +(up.headers.get('Content-Length') || 0);
-      if (len && len <= 100 * 1024 * 1024) ctx.waitUntil(cache.put(cacheKey, res.clone()));
+      if (len && len <= 500 * 1024 * 1024) ctx.waitUntil(cache.put(cacheKey, res.clone()));
     }
     const out = new Response(req.method === 'HEAD' ? null : res.body, { status: res.status, headers: cors(req, new Headers(res.headers)) });
     return out;
