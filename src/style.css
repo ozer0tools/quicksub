@@ -257,3 +257,19 @@ html.app .frame{max-width:none;border:0;border-radius:0;min-height:100vh}
 .banner .cta{flex:none;width:auto;text-decoration:none}
 .vrow .vtag{font-size:10px;color:var(--mute);margin-left:6px}
 @media (max-width:960px){.banner{flex-direction:column;align-items:flex-start;padding-left:16px}}
+
+/* popup do primeiro download */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(10,10,10,.55);backdrop-filter:blur(2px)}
+.modal[hidden]{display:none}
+.mbox{width:min(520px,100%);background:var(--card);border:1px solid var(--line);padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.mbox h2{font-size:16px;margin:14px 0 6px}
+.mbox p{margin:0;color:var(--ink3);line-height:1.6}
+.mbar{height:6px;background:var(--line);margin:18px 0 10px;overflow:hidden}
+.mbar i{display:block;height:100%;width:0;background:var(--or);transition:width .4s}
+.mbar.ind i{width:35%!important;animation:ind 1.3s ease-in-out infinite}
+@keyframes ind{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}
+.mrow{display:flex;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}
+.mrow b{font-size:18px}
+.mrow span{color:var(--ink3);text-align:right}
+.mwarn{margin-top:14px!important;font-size:11px;color:var(--ink2)!important}
+.mwarn::before{content:"";display:inline-block;width:6px;height:6px;background:var(--or);margin-right:8px;vertical-align:1px}

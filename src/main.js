@@ -287,6 +287,28 @@ function downloadBlob(name, blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
 
+// ------------------------------------------------------------ popup do download do modelo
+const mb = n => Math.round(n / 1e6).toLocaleString('pt-BR');
+const modal = {
+  shown: false,
+  progress(l, t, speed) {
+    if (!this.shown) { $('#dlModal').hidden = false; this.shown = true; }
+    const p = Math.min(100, l / t * 100);
+    $('#dlTitle').textContent = `Baixando o modelo ${MODEL_NAME[opts.model]}`;
+    $('#dlBar').parentElement.classList.toggle('ind', p >= 99.9);
+    $('#dlBar').style.width = p + '%';
+    if (p >= 99.9) {
+      $('#dlPct').textContent = 'Preparando';
+      $('#dlInfo').textContent = caps.webgpu ? 'carregando na placa de vídeo, pode levar até 1 minuto…' : 'carregando o modelo, pode levar até 1 minuto…';
+      return;
+    }
+    $('#dlPct').textContent = Math.floor(p) + '%';
+    const eta = speed > 0 ? Math.max(1, Math.round((t - l) / speed)) : 0;
+    $('#dlInfo').textContent = `${mb(l)} de ${mb(t)} MB` + (speed > 0 ? ` · ${(speed / 1e6).toFixed(1).replace('.', ',')} MB/s · faltam ${eta < 60 ? eta + ' s' : Math.ceil(eta / 60) + ' min'}` : '');
+  },
+  hide() { if (this.shown) { $('#dlModal').hidden = true; this.shown = false; } },
+};
+
 // ------------------------------------------------------------ lote
 const log = m => { $('#log').textContent = m; };
 async function processOne(f, signal) {
@@ -301,10 +323,16 @@ async function processOne(f, signal) {
     const audio = await audio16k(f.file, p => set('audio', p * 100));
     if (signal.aborted) throw new DOMException('', 'AbortError');
     set('transcrevendo', 0);
+    let downloading = false;
     const segs = await transcribeImpl(audio, d => {
-      if (d.type === 'load-progress') { set('modelo', d.loaded / d.total * 100); log(`Baixando o modelo ${MODEL_NAME[opts.model]}: ${(d.loaded / 1e6).toFixed(0)} de ${(d.total / 1e6).toFixed(0)} MB (só na primeira vez)`); }
-      if (d.type === 'run-progress') set('transcrevendo', d.pct * 100);
-    });
+      if (d.type === 'dl-progress' && d.total) {
+        downloading = true;
+        set('modelo', d.loaded / d.total * 100);
+        modal.progress(d.loaded, d.total, d.speed);
+      }
+      if (d.type === 'run-progress') { modal.hide(); set('transcrevendo', d.pct * 100); }
+    }).finally(() => modal.hide());
+    if (downloading) log('Modelo baixado e guardado neste navegador.');
     cues = buildCues(wordsFromSegments(segs), +style.max_chars, +style.max_lines);
   }
   if (!cues.length) { set('pulado', 100, 'Nenhuma fala detectada.'); return; }
@@ -348,7 +376,7 @@ async function runBatch() {
   const secs = Math.round((Date.now() - t0) / 1000);
   log(`Lote finalizado em ${secs < 60 ? secs + ' s' : Math.floor(secs / 60) + ' min ' + (secs % 60) + ' s'}.`);
 }
-function cancelBatch() { abortCtl?.abort(); killWorker(); if (pending) { pending({ type: 'error', message: 'cancelado' }); } }
+function cancelBatch() { abortCtl?.abort(); killWorker(); modal.hide(); if (pending) { pending({ type: 'error', message: 'cancelado' }); } }
 
 // ------------------------------------------------------------ eventos
 function bind(sel, obj, attr) {
@@ -458,6 +486,12 @@ if (new URLSearchParams(location.search).has('demo')) {
   window.__qsDemo = true;
   const fake = 'Olá pessoal, hoje eu vou mostrar como funciona a legenda automática direto no navegador.';
   transcribeImpl = async (audio, onMsg) => {
+    if (!window.__qsDemoDl && new URLSearchParams(location.search).has('demodl')) {
+      window.__qsDemoDl = true;
+      const T = 1.55e9;
+      for (let i = 0; i <= 20; i++) { await new Promise(r => setTimeout(r, 120)); onMsg({ type: 'dl-progress', loaded: T * i / 20, total: T, speed: 38e6 }); }
+      await new Promise(r => setTimeout(r, 900));
+    }
     for (let i = 1; i <= 5; i++) { await new Promise(r => setTimeout(r, 150)); onMsg({ type: 'run-progress', pct: i / 5 }); }
     const dur = audio.length / 16000;
     return [{ text: fake, timestamp: [0.2, Math.min(dur, 5.5)] }];

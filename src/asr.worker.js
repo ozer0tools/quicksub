@@ -1,7 +1,11 @@
 // Transcrição (Whisper) rodando num Web Worker, para não travar a tela.
 import { pipeline, env } from '@huggingface/transformers';
+import { parallelFetch, setReporter, clearDownloads } from './pfetch.js';
 
 env.allowLocalModels = false;
+
+setReporter((t, d) => post(t, d));
+env.fetch = parallelFetch;
 
 const MODELS = {
   turbo: { repo: 'onnx-community/whisper-large-v3-turbo',
@@ -20,6 +24,7 @@ function post(type, data = {}) { self.postMessage({ type, ...data }); }
 async function load(model, device, ortBase, f16 = true) {
   const key = model + '|' + device + '|' + f16;
   if (asr && loadedKey === key) return;
+  post('loading');
   if (ortBase) env.backends.onnx.wasm.wasmPaths = ortBase;
   env.backends.onnx.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 4) : 1;
   const m = MODELS[model];
@@ -40,6 +45,7 @@ async function load(model, device, ortBase, f16 = true) {
     try {
       asr = await pipeline('automatic-speech-recognition', m.repo, { device, dtype, progress_callback });
       loadedKey = key;
+      clearDownloads();
       return;
     } catch (e) { lastErr = e; }
   }
