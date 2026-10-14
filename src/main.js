@@ -24,6 +24,10 @@ let files = [];          // {id, file, name, size, mtime, info, err, srt, status
 let selected = null, view = store.get('qs-view') || 'list';
 let running = false, abortCtl = null, outDir = null;
 const caps = { webgpu: false, f16: false, codec: null };
+// celular ou aparelho com pouca memória: o turbo (~1,6 GB) costuma derrubar a aba
+const isMobile = (navigator.userAgentData && navigator.userAgentData.mobile) || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const lowMem = (navigator.deviceMemory && navigator.deviceMemory <= 4) || isMobile;
+const CRASH_KEY = 'qs-loading-model';
 const ST = { fila: ['Na fila', ''], audio: ['Lendo áudio', 'run'], modelo: ['Baixando modelo', 'run'], transcrevendo: ['Transcrevendo', 'run'],
   queimando: ['Gerando vídeo', 'run'], pronto: ['Pronto', 'done'], erro: ['Erro', 'bad'], cancelado: ['Cancelado', ''], pulado: ['Sem fala', ''] };
 const CODEC = { avc: 'H.264', hevc: 'HEVC (H.265)', vp9: 'VP9', vp8: 'VP8', av1: 'AV1', aac: 'AAC', mp3: 'MP3', opus: 'Opus',
@@ -312,7 +316,7 @@ const modal = {
 };
 
 // ------------------------------------------------------------ lote
-const log = m => { $('#log').textContent = m; };
+const log = m => { $('#log').textContent = m; const ml = $('#mlog'); if (ml) ml.textContent = m; };
 async function processOne(f, signal) {
   const set = (status, pct = f.pct, msg = f.msg) => { Object.assign(f, { status, pct: Math.round(pct), msg }); renderList(); if (f.id === selected) renderInfo(); };
   let cues;
@@ -326,7 +330,10 @@ async function processOne(f, signal) {
     if (signal.aborted) throw new DOMException('', 'AbortError');
     set('transcrevendo', 0);
     let downloading = false;
+    try { localStorage.setItem(CRASH_KEY, opts.model); } catch (e) {}
+    const clearCrash = () => { try { localStorage.removeItem(CRASH_KEY); } catch (e) {} };
     const segs = await transcribeImpl(audio, d => {
+      if (d.type === 'run-progress' || d.type === 'model-info') clearCrash();
       if (d.type === 'dl-progress' && d.total) {
         downloading = true;
         set('modelo', d.loaded / d.total * 100);
@@ -346,7 +353,7 @@ async function processOne(f, signal) {
         $('#modelNote').textContent = `Modelo carregado: ${MODEL_NAME[opts.model]} (${dt}).` + (d.errors.length ? ' Versões que falharam antes: ' + d.errors.join(' | ') : '');
         console.info('[QuickSub] modelo', d);
       }
-    }).finally(() => modal.hide());
+    }).finally(() => { modal.hide(); clearCrash(); });
     if (downloading) log('Modelo baixado e guardado neste navegador.');
     cues = buildCues(wordsFromSegments(segs), +style.max_chars, +style.max_lines);
   }
@@ -465,6 +472,7 @@ setTheme(document.documentElement.dataset.theme || 'light');
 window.addEventListener('beforeunload', e => { if (running) { e.preventDefault(); e.returnValue = ''; } });
 
 function renderModelNote() {
+  if (lowMem && opts.model === 'turbo') { $('#modelNote').textContent = 'O turbo usa ~1,6 GB de memória e pode derrubar a página no celular. Prefira o small.'; return; }
   const slow = !caps.webgpu && opts.model === 'turbo';
   $('#modelNote').textContent = slow ? 'O turbo sem placa de vídeo é muito lento no navegador. Prefira o small, ou a versão para Windows.'
     : opts.model === 'base' ? 'O base é rápido, mas erra mais em nomes e palavras difíceis.' : '';
@@ -484,6 +492,16 @@ function banner(title, text) {
   } catch (e) {}
   const fresh = !saved.opts;
   if (fresh && !caps.webgpu) opts.model = 'small';
+  if (fresh && lowMem && opts.model === 'turbo') opts.model = 'small';
+  // a página caiu enquanto carregava um modelo? troca por um menor e avisa
+  let crashed = null;
+  try { crashed = localStorage.getItem(CRASH_KEY); localStorage.removeItem(CRASH_KEY); } catch (e) {}
+  if (crashed) {
+    const smaller = { turbo: 'small', small: 'base', base: 'base' }[crashed] || 'base';
+    opts.model = smaller; save();
+    setTimeout(() => banner(`O modelo ${crashed} não coube na memória deste aparelho`,
+      `A página recarregou enquanto ele era preparado. Troquei para o ${smaller}, que é mais leve. Você pode mudar na aba Transcrição.`), 0);
+  }
   $('#gpuNote').textContent = caps.webgpu
     ? 'Placa de vídeo disponível (WebGPU): a transcrição roda nela.'
     : 'Sem WebGPU neste navegador: a transcrição roda no processador, bem mais devagar.';

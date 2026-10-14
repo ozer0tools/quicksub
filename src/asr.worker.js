@@ -47,7 +47,7 @@ async function load(model, device, ortBase, f16 = true, modelHost = '', modelPat
   if (device === 'webgpu') {
     const dec = m.webgpu.decoder_model_merged;
     tries = f16
-      ? [m.webgpu, { encoder_model: 'fp16', decoder_model_merged: 'fp16' }, { encoder_model: 'fp32', decoder_model_merged: dec }]
+      ? [{ ...m.webgpu, encoder_model: 'fp16' }, { encoder_model: 'fp16', decoder_model_merged: 'fp16' }, { encoder_model: 'fp32', decoder_model_merged: dec }]
       : [{ encoder_model: 'fp32', decoder_model_merged: dec }, 'fp32'];
   } else tries = [m.wasm, 'q8', undefined];
   const errors = [];
