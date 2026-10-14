@@ -1,0 +1,49 @@
+name: Espelhar modelos no Cloudflare R2
+
+# Copia os arquivos de modelo do Hugging Face para o seu bucket no R2.
+# Rode à mão em Actions → "Espelhar modelos no Cloudflare R2" → Run workflow.
+# Precisa dos secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+on:
+  workflow_dispatch:
+
+jobs:
+  espelhar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q "huggingface_hub[hf_xet]"
+      - name: Baixar do Hugging Face
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          base = ["*.json", "*.txt"]
+          sets = {
+            "onnx-community/whisper-large-v3-turbo": [
+              "onnx/encoder_model_fp16.onnx*", "onnx/decoder_model_merged_q4.onnx*", "onnx/decoder_model_merged_fp16.onnx*",
+              "onnx/encoder_model.onnx*", "onnx/encoder_model_quantized.onnx*", "onnx/decoder_model_merged_quantized.onnx*"],
+            "onnx-community/whisper-small": [
+              "onnx/encoder_model.onnx*", "onnx/decoder_model_merged_q4.onnx*",
+              "onnx/encoder_model_quantized.onnx*", "onnx/decoder_model_merged_quantized.onnx*"],
+            "onnx-community/whisper-base": [
+              "onnx/encoder_model.onnx*", "onnx/decoder_model_merged_q4.onnx*",
+              "onnx/encoder_model_quantized.onnx*", "onnx/decoder_model_merged_quantized.onnx*"],
+          }
+          for repo, pats in sets.items():
+              snapshot_download(repo, local_dir="modelos/" + repo, allow_patterns=base + pats)
+              print("ok", repo)
+          PY
+          du -sh modelos/*/*
+      - name: Enviar para o R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          rm -rf modelos/*/*/.cache
+          aws s3 sync modelos/ "s3://${{ secrets.R2_BUCKET }}/" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --only-show-errors
+          echo "Pronto."

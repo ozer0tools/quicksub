@@ -1,6 +1,6 @@
 // Transcrição (Whisper) rodando num Web Worker, para não travar a tela.
 import { pipeline, env } from '@huggingface/transformers';
-import { parallelFetch, setReporter, clearDownloads } from './pfetch.js';
+import { parallelFetch, setReporter, clearDownloads, setModelHost } from './pfetch.js';
 
 env.allowLocalModels = false;
 
@@ -21,7 +21,12 @@ const SR = 16000;
 
 function post(type, data = {}) { self.postMessage({ type, ...data }); }
 
-async function load(model, device, ortBase, f16 = true) {
+async function load(model, device, ortBase, f16 = true, modelHost = '') {
+  if (modelHost) {
+    env.remoteHost = modelHost;
+    env.remotePathTemplate = '{model}/';
+    setModelHost(modelHost);
+  }
   const key = model + '|' + device + '|' + f16;
   if (asr && loadedKey === key) return;
   post('loading');
@@ -37,19 +42,28 @@ async function load(model, device, ortBase, f16 = true) {
       post('load-progress', { loaded: l, total: t });
     }
   };
-  let first = m[device];
-  if (device === 'webgpu' && !f16) first = { ...first, encoder_model: 'fp32' };
-  const tries = [first, device === 'webgpu' ? 'fp32' : 'q8', undefined];
-  let lastErr;
+  // ordem de preferência: as versões leves primeiro (mesma precisão na prática, metade do download)
+  let tries;
+  if (device === 'webgpu') {
+    const dec = m.webgpu.decoder_model_merged;
+    tries = f16
+      ? [m.webgpu, { encoder_model: 'fp16', decoder_model_merged: 'fp16' }, { encoder_model: 'fp32', decoder_model_merged: dec }]
+      : [{ encoder_model: 'fp32', decoder_model_merged: dec }, 'fp32'];
+  } else tries = [m.wasm, 'q8', undefined];
+  const errors = [];
   for (const dtype of tries) {
     try {
       asr = await pipeline('automatic-speech-recognition', m.repo, { device, dtype, progress_callback });
       loadedKey = key;
       clearDownloads();
+      post('model-info', { dtype, f16, errors });
       return;
-    } catch (e) { lastErr = e; }
+    } catch (e) {
+      errors.push(String(e && e.message || e).slice(0, 200));
+      clearDownloads();
+    }
   }
-  throw lastErr;
+  throw new Error(errors.join(' | '));
 }
 
 /** Divide o áudio em janelas de até ~29 s, cortando no trecho mais silencioso. */
@@ -101,13 +115,18 @@ async function run(audio, prompt) {
   return segments;
 }
 
+async function workerF16() {
+  try { const a = await navigator.gpu?.requestAdapter(); return !!a && a.features.has('shader-f16'); } catch (e) { return false; }
+}
+
 self.onmessage = async ({ data }) => {
+  if (data.device === 'webgpu' && data.f16 === undefined) data.f16 = await workerF16();
   try {
     if (data.type === 'load') {
-      await load(data.model, data.device, data.ortBase, data.f16);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost);
       post('loaded', { device: data.device });
     } else if (data.type === 'run') {
-      await load(data.model, data.device, data.ortBase, data.f16);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost);
       const segments = await run(data.audio, data.prompt);
       post('result', { id: data.id, segments });
     }

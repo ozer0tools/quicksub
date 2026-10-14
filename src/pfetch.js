@@ -10,6 +10,11 @@ let reporter = () => {};
 let HOST = /^https:\/\/huggingface\.co\/.+\/resolve\//;
 export function setReporter(fn) { reporter = fn; }
 export function setHost(rx) { HOST = rx; }
+export function setModelHost(base) {
+  if (!base) return;
+  const e = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  HOST = new RegExp('^' + e + '|^https:\\/\\/huggingface\\.co\\/.+\\/resolve\\/');
+}
 export function clearDownloads() { DL.clear(); }
 
 function dlReport() {
