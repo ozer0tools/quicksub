@@ -52,7 +52,7 @@ function transcribe(audio, onMsg) {
       else onMsg(d);
     };
     getWorker().postMessage({ type: 'run', id: 1, audio, model: opts.model, device: caps.webgpu ? 'webgpu' : 'wasm',
-      modelHost: MODEL_HOST, modelPath: MODEL_PATH, ortBase: new URL('./ort/', document.baseURI).href }, [audio.buffer]);
+      modelHost: MODEL_HOST, modelPath: MODEL_PATH, lowMem, ortBase: new URL('./ort/', document.baseURI).href }, [audio.buffer]);
   });
 }
 
@@ -294,6 +294,31 @@ function downloadBlob(name, blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
 
+// ------------------------------------------------------------ confirmação de download no celular
+const DL_SIZE = { turbo: '~560 a 760 MB', small: '~300 MB', base: '~100 MB' };
+async function modelCached(model) {
+  const repo = { turbo: 'whisper-large-v3-turbo', small: 'whisper-small', base: 'whisper-base' }[model];
+  try {
+    const c = await caches.open('transformers-cache');
+    return (await c.keys()).some(r => r.url.includes(repo + '/') && /encoder_model/.test(r.url));
+  } catch (e) { return false; }
+}
+function confirmDownload(model) {
+  return new Promise(resolve => {
+    const box = $('#askModal');
+    $('#askTitle').textContent = `Baixar o modelo ${MODEL_NAME[model]}?`;
+    $('#askText').textContent = `São ${DL_SIZE[model]}, só na primeira vez. Recomendado no Wi-Fi.` +
+      (model === 'turbo' ? ' O turbo é o mais preciso, mas pode não caber na memória de celulares mais simples.' : '');
+    $('#askAlt').hidden = model === 'base';
+    $('#askAlt').textContent = model === 'turbo' ? `Usar o small (${DL_SIZE.small})` : `Usar o base (${DL_SIZE.base})`;
+    box.hidden = false;
+    const done = v => { box.hidden = true; resolve(v); };
+    $('#askOk').onclick = () => done(model);
+    $('#askAlt').onclick = () => done(model === 'turbo' ? 'small' : 'base');
+    $('#askCancel').onclick = () => done('cancel');
+  });
+}
+
 // ------------------------------------------------------------ popup do download do modelo
 const mb = n => Math.round(n / 1e6).toLocaleString('pt-BR');
 const modal = {
@@ -330,11 +355,16 @@ async function processOne(f, signal) {
     set('audio', 0, '');
     const audio = await audio16k(f.file, p => set('audio', p * 100));
     if (signal.aborted) throw new DOMException('', 'AbortError');
+    if (lowMem && !(await modelCached(opts.model))) {
+      const choice = await confirmDownload(opts.model);
+      if (choice === 'cancel') throw new DOMException('', 'AbortError');
+      if (choice !== opts.model) { opts.model = choice; save(); $('[data-o=model]').value = choice; renderStats(); }
+    }
     set('transcrevendo', 0);
     let downloading = false;
     try { localStorage.setItem(CRASH_KEY, opts.model); } catch (e) {}
     const clearCrash = () => { try { localStorage.removeItem(CRASH_KEY); } catch (e) {} };
-    const segs = await transcribeImpl(audio, d => {
+    const run = () => transcribeImpl(audio.slice(), d => {
       if (d.type === 'run-progress' || d.type === 'model-info') clearCrash();
       if (d.type === 'dl-progress' && d.total) {
         downloading = true;
@@ -347,7 +377,9 @@ async function processOne(f, signal) {
         console.warn('[QuickSub] ponte indisponível:', d.reason);
       }
       if (d.type === 'load-plan') {
-        modal.variant = d.f16 ? 'versão leve (fp16)' : 'versão completa: o navegador não informou suporte a fp16 na placa';
+        const f = d.first || {}, enc = typeof f === 'string' ? f : f.encoder_model;
+        modal.variant = /q4/.test(enc || '') ? 'versão compacta (q4), para caber na memória do aparelho'
+          : enc === 'fp16' ? 'versão leve (fp16)' : 'versão completa: o navegador não informou suporte a fp16 na placa';
         console.info('[QuickSub] plano', d);
       }
       if (d.type === 'model-info') {
@@ -356,6 +388,16 @@ async function processOne(f, signal) {
         console.info('[QuickSub] modelo', d);
       }
     }).finally(() => { modal.hide(); clearCrash(); });
+    let segs;
+    try { segs = await run(); }
+    catch (e) {
+      // modelo não carregou neste aparelho: tenta o próximo mais leve antes de desistir
+      const next = { turbo: 'small', small: 'base' }[opts.model];
+      if (!next || signal.aborted || /cancel/i.test(e.message)) throw e;
+      log(`O modelo ${MODEL_NAME[opts.model]} não carregou aqui (${String(e.message).slice(0, 80)}). Tentando o ${next}…`);
+      opts.model = next; save(); $('[data-o=model]').value = next; renderStats(); renderModelNote();
+      segs = await run();
+    }
     if (downloading) log('Modelo baixado e guardado neste navegador.');
     cues = buildCues(wordsFromSegments(segs), +style.max_chars, +style.max_lines);
   }
@@ -482,6 +524,7 @@ function renderModelNote() {
 function banner(title, text) {
   $('#banner').hidden = false; $('#bannerTitle').textContent = title; $('#bannerText').textContent = text;
   $('#bannerLink').href = DOWNLOAD_URL;
+  $('#bannerLink').hidden = isMobile;
 }
 
 // ------------------------------------------------------------ início

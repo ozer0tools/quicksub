@@ -21,13 +21,13 @@ const SR = 16000;
 
 function post(type, data = {}) { self.postMessage({ type, ...data }); }
 
-async function load(model, device, ortBase, f16 = true, modelHost = '', modelPath = '') {
+async function load(model, device, ortBase, f16 = true, modelHost = '', modelPath = '', lowMem = false) {
   if (modelHost) {
     env.remoteHost = modelHost;
     env.remotePathTemplate = modelPath || '{model}/resolve/{revision}/';
     setModelHost(modelHost);
   }
-  const key = model + '|' + device + '|' + f16;
+  const key = model + '|' + device + '|' + f16 + '|' + lowMem;
   if (asr && loadedKey === key) return;
   post('loading');
   if (ortBase) env.backends.onnx.wasm.wasmPaths = ortBase;
@@ -46,9 +46,18 @@ async function load(model, device, ortBase, f16 = true, modelHost = '', modelPat
   let tries;
   if (device === 'webgpu') {
     const dec = m.webgpu.decoder_model_merged;
-    tries = f16
-      ? [{ ...m.webgpu, encoder_model: 'fp16' }, { encoder_model: 'fp16', decoder_model_merged: 'fp16' }, { encoder_model: 'fp32', decoder_model_merged: dec }]
-      : [{ encoder_model: 'fp32', decoder_model_merged: dec }, 'fp32'];
+    if (lowMem && model === 'turbo') {
+      // celular: turbo compacto (~560 MB com fp16, ~760 MB sem). Nunca a versão fp32 de 2,9 GB.
+      tries = f16 ? [{ encoder_model: 'q4f16', decoder_model_merged: 'q4f16' }, { encoder_model: 'q4', decoder_model_merged: 'q4' }]
+                  : [{ encoder_model: 'q4', decoder_model_merged: 'q4' }];
+    } else if (f16) {
+      tries = [{ ...m.webgpu, encoder_model: 'fp16' }, { encoder_model: 'fp16', decoder_model_merged: 'fp16' }];
+      if (!lowMem) tries.push({ encoder_model: 'fp32', decoder_model_merged: dec });
+    } else {
+      tries = model === 'turbo' ? [{ encoder_model: 'q4', decoder_model_merged: dec }, { encoder_model: 'fp32', decoder_model_merged: dec }]
+                                : [{ encoder_model: 'fp32', decoder_model_merged: dec }, 'fp32'];
+      if (lowMem) tries = tries.slice(0, 1);
+    }
   } else tries = [m.wasm, 'q8', undefined];
   const errors = [];
   post('load-plan', { f16, first: tries[0] });
@@ -124,10 +133,10 @@ self.onmessage = async ({ data }) => {
   if (data.device === 'webgpu' && data.f16 === undefined) data.f16 = await workerF16();
   try {
     if (data.type === 'load') {
-      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath, data.lowMem);
       post('loaded', { device: data.device });
     } else if (data.type === 'run') {
-      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath);
+      await load(data.model, data.device, data.ortBase, data.f16, data.modelHost, data.modelPath, data.lowMem);
       const segments = await run(data.audio, data.prompt);
       post('result', { id: data.id, segments });
     }

@@ -345,3 +345,7 @@ body{padding:0;background-image:none}
   .stage{height:auto;aspect-ratio:var(--ar,16/9);max-height:60vh;min-height:180px;margin:0 auto;width:100%;box-sizing:border-box}
   .stage canvas{max-height:none}
 }
+
+.mbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.mbtns .cta{width:auto}
+.banner .cta[hidden]{display:none}
