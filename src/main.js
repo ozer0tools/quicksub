@@ -82,6 +82,8 @@ async function preview() {
     const scale = Math.min(1, 1280 / Math.max(fr.w, fr.h));
     const W = Math.round(fr.w * scale), H = Math.round(fr.h * scale);
     const c = $('#prev'); c.width = W; c.height = H;
+    // proporção da área (nas telas menores, que crescem pela largura), contando as margens internas
+    $('.stage').style.setProperty('--ar', `${W + 32} / ${H + 40}`);
     const ctx = c.getContext('2d');
     if (fr.canvas) ctx.drawImage(fr.canvas, 0, 0, W, H); else { ctx.fillStyle = '#565b63'; ctx.fillRect(0, 0, W, H); }
     const cue = sampleCue($('#sample').value, style);

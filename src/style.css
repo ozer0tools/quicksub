@@ -336,3 +336,12 @@ body{padding:0;background-image:none}
 
 .mlog{display:none}
 @media (max-width:640px){.end .mlog:not(:empty){display:block}}
+
+/* preview: o canvas preenche a área e a imagem se ajusta dentro dela, sem nunca vazar */
+.stage{position:relative;display:block;overflow:hidden}
+.stage canvas{position:absolute;left:16px;right:16px;top:28px;bottom:12px;width:calc(100% - 32px);height:calc(100% - 40px);
+  max-width:none;max-height:none;object-fit:contain;background:transparent}
+@media (max-width:960px){
+  .stage{height:auto;aspect-ratio:var(--ar,16/9);max-height:60vh;min-height:180px;margin:0 auto;width:100%;box-sizing:border-box}
+  .stage canvas{max-height:none}
+}
