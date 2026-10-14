@@ -24,6 +24,10 @@ npm run build     # gera a pasta dist
 
 A publicação no GitHub Pages é automática a cada envio para `main` (`.github/workflows/pages.yml`).
 
+## Licença
+
+Código sob a [licença MIT](LICENSE), © 2026 ozer0tools.
+
 ## Créditos
 
-Fontes Montserrat, Inter, Poppins, Anton, Bebas Neue e Space Mono (SIL Open Font License). `coi-serviceworker` (MIT).
+Fontes Montserrat, Inter, Poppins, Anton, Bebas Neue e Space Mono (SIL Open Font License). Bibliotecas: transformers.js (Apache 2.0), mediabunny (MPL 2.0), coi-serviceworker (MIT). Modelos Whisper da OpenAI (MIT), convertidos pela comunidade ONNX no Hugging Face.
