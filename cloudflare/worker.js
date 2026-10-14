@@ -32,12 +32,13 @@ export default {
     const cache = caches.default;
     let res = await cache.match(cacheKey);
     if (!res) {
+      // Sem "cf.cacheEverything": nos arquivos acima de 512 MB (ex.: o ouvido fp16 do turbo, 1,27 GB)
+      // o cache do Cloudflare recusa o arquivo inteiro e devolve 403. O cache dos pedaços é feito abaixo.
       const up = await fetch(ORIGIN + url.pathname, {
         headers: range ? { Range: range } : {},
         redirect: 'follow',
-        cf: { cacheEverything: true, cacheTtl: 2592000 },
       });
-      if (!up.ok && up.status !== 206) return new Response('Erro na origem: ' + up.status, { status: up.status, headers: cors(req) });
+      if (!up.ok && up.status !== 206) return new Response('Erro na origem: ' + up.status + ' (' + new URL(up.url || ORIGIN).host + ')', { status: up.status, headers: cors(req) });
       const h = new Headers();
       for (const k of ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag']) {
         const v = up.headers.get(k); if (v) h.set(k, v);
