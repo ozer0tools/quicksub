@@ -102,7 +102,8 @@
       <div class="span2"><span class="cell-l">Salvar em</span><div class="ctl"><button class="tagbtn" id="pickOut">Escolher pasta de saída</button><span class="hint" id="outName"></span></div>
         <p class="hint" id="outNote" style="margin-top:6px"></p></div>
       <div class="span2"><span class="cell-l">SRT revisado</span><div class="ctl"><label class="chk"><input type="checkbox" data-o="reuse_srt">Usar o .srt de mesmo nome, se você adicionar um junto com o vídeo</label></div></div>
-      <div class="span2"><p class="hint">Para revisar o texto: gere só os SRT, corrija no Bloco de Notas e adicione os .srt junto com os vídeos. Eles entram no lugar da transcrição.</p></div>
+      <div class="span2"><span class="cell-l">Revisão</span><div class="ctl"><label class="chk"><input type="checkbox" data-o="review">Revisar legendas antes de gerar o vídeo</label></div>
+        <p class="hint" style="margin-top:6px">Ligado: o lote só transcreve, você corrige cada vídeo e depois gera todos de uma vez. Desligado: gera direto, e dá para corrigir depois em "Revisar legendas" e "Gerar de novo".</p></div>
     </div>
   </div>
 </section>
@@ -144,6 +145,23 @@
     <h2 id="askTitle">Baixar o modelo?</h2>
     <p id="askText"></p>
     <div class="mbtns"><button class="cta" id="askOk">Baixar</button><button class="cta ghost" id="askAlt">Usar o small</button><button class="tagbtn" id="askCancel">Cancelar</button></div>
+  </div>
+</div>
+<div class="modal ed" id="edModal" hidden role="dialog" aria-modal="true" aria-labelledby="edName">
+  <div class="edbox">
+    <div class="edhead"><span class="tag or">Revisar</span><b id="edName"></b><span class="hint" id="edCount"></span>
+      <button class="tagbtn" id="edClose">Fechar</button></div>
+    <div class="edbody">
+      <div class="edleft">
+        <div class="edstage" id="edStage"><video id="edVideo" playsinline preload="metadata"></video><canvas id="edCanvas"></canvas></div>
+        <div class="edbar"><button class="ed-play" id="edPP" aria-label="Tocar ou pausar">▶</button><input type="range" id="edSeek" min="0" max="1" step="0.01" value="0" aria-label="Posição"><span class="ed-time" id="edT">0:00,0</span></div>
+        <p class="hint" id="edNote"></p>
+        <p class="hint edtip">Toque numa fala para ver o momento. ▶ toca só aquele trecho. Clique no tempo para ajustar. "Dividir" corta onde está o cursor do texto.</p>
+      </div>
+      <div class="edlist" id="edList"></div>
+    </div>
+    <div class="edfoot"><button class="tagbtn" id="edSrt">Baixar .srt</button><span style="flex:1"></span>
+      <button class="cta ghost" id="edSave">Salvar</button><button class="cta" id="edGen">Salvar e gerar vídeo</button></div>
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>

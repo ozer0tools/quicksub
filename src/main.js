@@ -3,6 +3,7 @@ import { DEFAULT_STYLE, buildCues, wordsFromSegments, toSrt, fromSrt, drawCaptio
 import { families, facesOf, bestFace, ensureFace, hasLocalFonts, loadLocalFonts, addUploadedFont, weightName } from './fonts.js';
 import { probe, frameAt, audio16k, burn, pickVideoCodec } from './media.js';
 import { MODEL_HOST, MODEL_PATH } from './config.js';
+import { openEditor } from './editor.js';
 
 const DOWNLOAD_URL = 'https://github.com/ozer0tools/quicksub/releases/latest';
 const VIDEO_EXT = /\.(mp4|mov|mkv|m4v|webm|avi|wmv|flv|mts|m2ts|ts|3gp|mpg|mpeg|ogv)$/i;
@@ -14,13 +15,26 @@ const stem = n => n.replace(/\.[^.]+$/, '');
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 
-const DEFAULT_OPTS = { model: 'turbo', mode: 'tudo', quality: 'padrao', reuse_srt: true };
+const DEFAULT_OPTS = { model: 'turbo', mode: 'tudo', quality: 'padrao', reuse_srt: true, review: false };
 const saved = store.get('qs-web-cfg') || {};
 const style = { ...DEFAULT_STYLE, ...(saved.style || {}) };
 const opts = { ...DEFAULT_OPTS, ...(saved.opts || {}) };
 const save = () => store.set('qs-web-cfg', { style, opts });
 
-let files = [];          // {id, file, name, size, mtime, info, err, srt, status, pct, msg}
+let files = [];          // {id, file, name, size, mtime, info, err, srt, status, pct, msg, cues, edited, out}
+
+// falas de cada vídeo ficam guardadas neste navegador (o vídeo não: só o texto)
+const cueKey = f => 'qs-cues:' + f.name + '|' + f.size;
+function setCues(f, cues, edited = false) {
+  f.cues = cues; if (edited) f.edited = true;
+  if (!cues) { try { localStorage.removeItem(cueKey(f)); } catch (e) {} return; }
+  const idx = (store.get('qs-cues-idx') || []).filter(k => k !== cueKey(f));
+  idx.push(cueKey(f));
+  while (idx.length > 40) { try { localStorage.removeItem(idx.shift()); } catch (e) {} }
+  store.set('qs-cues-idx', idx);
+  const r = n => Math.round(n * 1000) / 1000;
+  store.set(cueKey(f), cues.map(c => ({ s: r(c.s), e: r(c.e), w: c.w.map(w => ({ t: w.t, s: r(w.s), e: r(w.e) })) })));
+}
 let selected = null, view = store.get('qs-view') || 'list';
 let running = false, abortCtl = null, outDir = null;
 const caps = { webgpu: false, f16: false, codec: null };
@@ -29,7 +43,8 @@ const isMobile = (navigator.userAgentData && navigator.userAgentData.mobile) || 
 const lowMem = (navigator.deviceMemory && navigator.deviceMemory <= 4) || isMobile;
 const CRASH_KEY = 'qs-loading-model';
 const ST = { fila: ['Na fila', ''], audio: ['Lendo áudio', 'run'], modelo: ['Baixando modelo', 'run'], transcrevendo: ['Transcrevendo', 'run'],
-  queimando: ['Gerando vídeo', 'run'], pronto: ['Pronto', 'done'], erro: ['Erro', 'bad'], cancelado: ['Cancelado', ''], pulado: ['Sem fala', ''] };
+  queimando: ['Gerando vídeo', 'run'], pronto: ['Pronto', 'done'], erro: ['Erro', 'bad'], cancelado: ['Cancelado', ''], pulado: ['Sem fala', ''],
+  revisar: ['Pronto para revisar', 'rev'] };
 const CODEC = { avc: 'H.264', hevc: 'HEVC (H.265)', vp9: 'VP9', vp8: 'VP8', av1: 'AV1', aac: 'AAC', mp3: 'MP3', opus: 'Opus',
   vorbis: 'Vorbis', ac3: 'AC-3', eac3: 'E-AC-3', flac: 'FLAC' };
 const cname = c => c ? (CODEC[c] || (String(c).startsWith('pcm') ? 'PCM' : String(c).toUpperCase())) : '—';
@@ -133,7 +148,7 @@ function stInfo(f) {
 function rowHtml(f, i) {
   const s = stInfo(f), sel = f.id === selected ? ' sel' : '';
   const rm = running ? '<span></span>' : `<button class="vx" data-rm="${i}" title="Remover da lista" aria-label="Remover">×</button>`;
-  const busy = s.st && s.st !== 'pronto' && s.st !== 'fila' && s.st !== 'erro';
+  const busy = ['audio', 'modelo', 'transcrevendo', 'queimando'].includes(s.st);
   if (view === 'thumbs') {
     thumb(f);
     const t = thumbs.get(f.id);
@@ -142,7 +157,7 @@ function rowHtml(f, i) {
       ${busy ? `<i class="vp" style="width:${s.pct}%"></i>` : ''}</div>`;
   }
   return `<div class="vrow${sel}" data-i="${i}" title="${esc(f.name)}"><span class="sq ${s.cls}" title="${esc(s.label)}"></span>
-    <span class="vn">${esc(f.name)}${f.srt ? '<span class="vtag">+ srt</span>' : ''}</span>
+    <span class="vn">${esc(f.name)}${f.srt ? '<span class="vtag">+ srt</span>' : ''}${f.cues && !f.status ? '<span class="vtag">legenda salva</span>' : ''}</span>
     <span class="vd">${busy ? s.pct + '%' : fmtDur(f.info && f.info.dur)}</span>${rm}
     ${busy ? `<i class="vp" style="width:${s.pct}%"></i>` : ''}</div>`;
 }
@@ -171,6 +186,7 @@ function renderInfo() {
     if (!d.canDecode) notes.push(['warn', 'Este navegador não consegue ler o vídeo deste arquivo']);
     if (d.hdr) notes.push(['warn', 'Vídeo HDR: as cores podem sair lavadas']);
     if (d.w % 2 || d.h % 2) notes.push(['', `Dimensão ímpar: sai como ${d.w - d.w % 2}×${d.h - d.h % 2}`]);
+    if (f.cues && !f.status) notes.push(['', `Legenda já transcrita (${f.cues.length} falas), guardada neste navegador: não precisa transcrever de novo`]);
     if (f.srt) notes.push(['', opts.reuse_srt ? `Vai usar o ${f.srt.name} no lugar da transcrição` : `Tem um ${f.srt.name} junto (desligado em Exportação)`]);
   }
   const ch = d.channels === 1 ? 'mono' : d.channels === 2 ? 'estéreo' : d.channels ? d.channels + ' canais' : '—';
@@ -186,14 +202,15 @@ function renderInfo() {
     </div>
     ${notes.length ? `<ul class="inotes">${notes.map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join('')}</ul>` : ''}
     ${s.st ? `<div class="istat"><b>${esc(s.label)}</b> · ${s.pct}%${f.msg ? `<div class="${s.st === 'erro' ? 'err' : 'hint'}" style="margin-top:4px;font-size:11px">${esc(f.msg)}</div>` : ''}<div class="pb"><i style="width:${s.pct}%"></i></div></div>` : ''}
-    <div class="iact">${f.out ? '<button class="tagbtn" data-act="save">Baixar de novo</button>' : ''}${running ? '' : '<button class="tagbtn" data-act="rm">Remover da lista</button>'}</div>`;
+    <div class="iact">${f.cues && !running ? `<button class="tagbtn on" data-act="edit">Revisar legendas</button><button class="tagbtn" data-act="gen">${f.out || f.status === 'pronto' ? 'Gerar de novo' : opts.mode === 'srt' ? 'Gerar .srt' : 'Gerar vídeo'}</button>` : ''}${f.out ? '<button class="tagbtn" data-act="save">Baixar de novo</button>' : ''}${f.cues && !running ? '<button class="tagbtn" data-act="retr">Transcrever de novo</button>' : ''}${running ? '' : '<button class="tagbtn" data-act="rm">Remover da lista</button>'}</div>`;
 }
 function renderFiles() {
   if (selected && !files.some(f => f.id === selected)) selected = null;
   renderList(); renderInfo();
-  const n = files.filter(f => !f.err).length;
+  const ok = files.filter(f => !f.err), n = ok.length, pl = n > 1 ? 's' : '';
+  const verb = !opts.review ? 'Legendar' : ok.some(f => !f.cues) ? 'Transcrever' : 'Gerar';
   $$('[data-go]').forEach(b => {
-    b.textContent = running ? 'Cancelar' : n ? `Legendar ${n} vídeo${n > 1 ? 's' : ''}` : 'Legendar';
+    b.textContent = running ? 'Cancelar' : !n ? 'Legendar' : verb === 'Gerar' && opts.mode === 'srt' ? `Gerar ${n} SRT` : `${verb} ${n} vídeo${pl}`;
     b.disabled = !running && !n;
   });
   $('#clear').hidden = running || !files.length;
@@ -212,11 +229,14 @@ async function addFiles(list) {
   for (const file of vids) {
     if (/_legendado\./i.test(file.name)) continue;
     if (files.some(f => f.name === file.name && f.size === file.size)) continue;
-    files.push({ id: 'v' + (++uid), file, name: file.name, size: file.size, mtime: file.lastModified, info: null });
+    const f = { id: 'v' + (++uid), file, name: file.name, size: file.size, mtime: file.lastModified, info: null };
+    const c = store.get(cueKey(f));
+    if (Array.isArray(c) && c.length) f.cues = c;
+    files.push(f);
   }
   for (const s of srts) {
     const f = files.find(x => stem(x.name).toLowerCase() === stem(s.name).toLowerCase());
-    if (f) f.srt = s;
+    if (f) { f.srt = s; if (opts.reuse_srt) f.cues = null; }
   }
   renderFiles(); renderRef();
   for (const f of files.filter(x => !x.info && !x.err)) {
@@ -344,8 +364,23 @@ const modal = {
 
 // ------------------------------------------------------------ lote
 const log = m => { $('#log').textContent = m; const ml = $('#mlog'); if (ml) ml.textContent = m; };
+const setter = f => (status, pct = f.pct, msg = f.msg) => { Object.assign(f, { status, pct: Math.round(pct), msg }); renderList(); if (f.id === selected) renderInfo(); };
+const srtBlob = cues => new Blob([toSrt(cues, style)], { type: 'text/plain;charset=utf-8' });
 async function processOne(f, signal) {
-  const set = (status, pct = f.pct, msg = f.msg) => { Object.assign(f, { status, pct: Math.round(pct), msg }); renderList(); if (f.id === selected) renderInfo(); };
+  const set = setter(f);
+  if (!f.cues) {
+    const cues = await getCues(f, signal, set);
+    if (!cues.length) { set('pulado', 100, 'Nenhuma fala detectada.'); return; }
+    setCues(f, cues);
+    await writeOut(stem(f.name) + '.srt', srtBlob(cues));
+    if (opts.review) { set('revisar', 100, 'Clique em "Revisar legendas" para corrigir.'); return; }
+  } else if (f.edited) {
+    await writeOut(stem(f.name) + '.srt', srtBlob(f.cues)); f.edited = false;
+  }
+  if (opts.mode === 'srt') { set('pronto', 100, 'SRT gerado'); return; }
+  await burnOne(f, signal, set);
+}
+async function getCues(f, signal, set) {
   let cues;
   if (opts.reuse_srt && f.srt) {
     cues = fromSrt(await f.srt.text(), style);
@@ -401,9 +436,10 @@ async function processOne(f, signal) {
     if (downloading) log('Modelo baixado e guardado neste navegador.');
     cues = buildCues(wordsFromSegments(segs), +style.max_chars, +style.max_lines);
   }
-  if (!cues.length) { set('pulado', 100, 'Nenhuma fala detectada.'); return; }
-  await writeOut(stem(f.name) + '.srt', new Blob([toSrt(cues, style)], { type: 'text/plain;charset=utf-8' }));
-  if (opts.mode === 'srt') { set('pronto', 100, 'SRT gerado'); return; }
+  return cues;
+}
+async function burnOne(f, signal, set) {
+  const cues = f.cues;
   set('queimando', 0);
   const font = await ensureFace(style.face, style.font);
   const name = stem(f.name) + '_legendado.mp4';
@@ -416,15 +452,17 @@ async function processOne(f, signal) {
     set('pronto', 100, r.codec !== 'avc' ? `Gerado em ${cname(r.codec)}: este navegador não gera H.264` : '');
   } catch (e) { if (writable) await writable.abort?.().catch(() => {}); throw e; }
 }
-async function runBatch() {
-  if (!files.some(f => !f.err)) return;
-  if (canPickDir && !outDir) {
+async function runBatch(only) {
+  if (running || !files.some(f => !f.err)) return;
+  const needsOut = opts.mode !== 'srt' || (only || files).some(f => !f.cues || f.edited);
+  if (canPickDir && !outDir && needsOut) {
     log('Escolha onde salvar. Dica: crie uma subpasta, por exemplo Vídeos\\Legendados.');
     try { await pickOut(); }
     catch (e) { log('Sem pasta escolhida: os vídeos e .srt vão como downloads.'); }
   }
   running = true; abortCtl = new AbortController();
-  const list = files.filter(f => !f.err);
+  log('');
+  const list = (only || files).filter(f => !f.err);
   list.forEach(f => Object.assign(f, { status: 'fila', pct: 0, msg: '', out: null }));
   renderFiles();
   const t0 = Date.now();
@@ -440,7 +478,9 @@ async function runBatch() {
   list.forEach(f => { if (f.status === 'fila') f.status = 'cancelado'; });
   running = false; renderFiles();
   const secs = Math.round((Date.now() - t0) / 1000);
-  log(`Lote finalizado em ${secs < 60 ? secs + ' s' : Math.floor(secs / 60) + ' min ' + (secs % 60) + ' s'}.`);
+  const nrev = list.filter(f => f.status === 'revisar').length;
+  log(`Lote finalizado em ${secs < 60 ? secs + ' s' : Math.floor(secs / 60) + ' min ' + (secs % 60) + ' s'}.` +
+    (nrev ? ` ${nrev} pronto${nrev > 1 ? 's' : ''} para revisar: clique em cada vídeo e em "Revisar legendas". Depois, "Gerar".` : ''));
 }
 function cancelBatch() { abortCtl?.abort(); killWorker(); modal.hide(); if (pending) { pending({ type: 'error', message: 'cancelado' }); } }
 
@@ -455,7 +495,7 @@ function bind(sel, obj, attr) {
     show();
     el.addEventListener('input', () => {
       obj[k] = el.type === 'checkbox' ? el.checked : (el.type === 'range' || 'num' in el.dataset) ? +el.value : el.value;
-      show(); queuePreview(); if (k === 'model') renderModelNote();
+      show(); queuePreview(); if (k === 'model') renderModelNote(); if (k === 'review' || k === 'mode') renderFiles();
     });
   });
 }
@@ -474,6 +514,26 @@ $('#info').addEventListener('click', e => {
   const f = files.find(x => x.id === selected);
   if (b.dataset.act === 'save' && f?.out) downloadBlob(f.out.name, f.out.blob);
   if (b.dataset.act === 'rm') removeAt(files.findIndex(x => x.id === selected));
+  if (b.dataset.act === 'edit' && f?.cues) edit(f);
+  if (b.dataset.act === 'gen' && f?.cues) runBatch([f]);
+  if (b.dataset.act === 'retr' && f) {
+    setCues(f, null); Object.assign(f, { status: null, pct: 0, msg: '', edited: false }); renderFiles();
+    runBatch([f]);
+  }
+});
+async function edit(f) {
+  const font = await ensureFace(style.face, style.font);
+  const short = window.innerWidth <= 860;
+  $('#edGen').textContent = (short ? 'Gerar ' : 'Salvar e gerar ') + (opts.mode === 'srt' ? '.srt' : 'vídeo');
+  openEditor(f, {
+    style, font,
+    onSave: cues => { setCues(f, cues, true); if (f.status === 'pronto') f.msg = 'Legenda alterada: gere de novo para atualizar o vídeo.'; renderFiles(); },
+    onGenerate: () => runBatch([f]),
+  });
+}
+$('#vitems').addEventListener('dblclick', e => {
+  const row = e.target.closest('[data-i]'); const f = row && files[+row.dataset.i];
+  if (f?.cues && !running) edit(f);
 });
 $$('[data-view]').forEach(b => {
   b.classList.toggle('on', b.dataset.view === view);
